@@ -526,15 +526,18 @@ void PipelineCache::SaveClassicCache() {
     if (path.empty()) {
         return;
     }
+    // Raw C prototypes are not declared in this TU (VK_NO_PROTOTYPES): use
+    // the Hpp dispatcher, as vk_pipeline_serialization.cpp does.
+    const auto& dispatch = VULKAN_HPP_DEFAULT_DISPATCHER;
     const VkDevice device = static_cast<VkDevice>(instance.GetDevice());
     const VkPipelineCache cache = static_cast<VkPipelineCache>(*pipeline_cache);
     size_t size = 0;
-    if (vkGetPipelineCacheData(device, cache, &size, nullptr) != VK_SUCCESS || size == 0 ||
-        size > 64 * 1024 * 1024) {
+    if (dispatch.vkGetPipelineCacheData(device, cache, &size, nullptr) != VK_SUCCESS ||
+        size == 0 || size > 64 * 1024 * 1024) {
         return;
     }
     std::vector<std::uint8_t> data(size);
-    if (vkGetPipelineCacheData(device, cache, &size, data.data()) != VK_SUCCESS) {
+    if (dispatch.vkGetPipelineCacheData(device, cache, &size, data.data()) != VK_SUCCESS) {
         return;
     }
     data.resize(size);
