@@ -91,6 +91,20 @@ final class TlouDevicePolicy {
             env.put("GOW3_STAGING_PREWARM_BLOCKS","2");
             return "8gb-a6xx-low-memory";
         }
+        // Nord 4 / Snapdragon 7+ Gen 3 (Adreno 732): 27 Nov 2026 logs show the
+        // texture cache over its critical level (2189 of 2088 MiB) on the 8 GB
+        // balanced profile, same pressure the A6xx low-memory path was added
+        // for. Same low values; 740/750/830 deliberately stay balanced (their
+        // existing test asserts it), so this matches only the 73x mid-tier.
+        final boolean a73x=gpu.matches(".*adreno[^0-9]*73[02]([^0-9]|$).*");
+        if(a73x) {
+            env.put("GOW3_STREAM_MB","256");
+            env.put("GOW3_STAGING_KEEP_MB","64");
+            env.put("GOW3_STAGING_KEEP_VRAM_MB","0");
+            env.put("GOW3_STAGING_LARGE_MB","0");
+            env.put("GOW3_STAGING_PREWARM_BLOCKS","2");
+            return "8gb-a73x-low-memory";
+        }
         return "8gb-balanced";
     }
 }

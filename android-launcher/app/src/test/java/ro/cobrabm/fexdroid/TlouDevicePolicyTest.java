@@ -73,6 +73,16 @@ public final class TlouDevicePolicyTest {
         ok("2".equals(e.get("GOW3_STAGING_PREWARM_BLOCKS")), "two 16 MiB prewarm blocks");
         ok(!e.containsKey("GOW3_DMEM_MB") && !e.containsKey("GOW3_DMEM_REPORT_MB"),
             "A640 must keep guest PS4 virtual memory unchanged");
+        e=env();
+        ok("8gb-a73x-low-memory".equals(TlouDevicePolicy.configureMemory(
+            e,7318L<<20,"Adreno (TM) 732")), "Nord 4 A732 profile must activate");
+        ok("256".equals(e.get("GOW3_STREAM_MB")), "A732 stream memory cap");
+        ok("64".equals(e.get("GOW3_STAGING_KEEP_MB")), "A732 staging retention");
+        ok("0".equals(e.get("GOW3_STAGING_KEEP_VRAM_MB")), "A732 idle VRAM");
+        ok("0".equals(e.get("GOW3_STAGING_LARGE_MB")), "no A732 pinned scratch");
+        ok("2".equals(e.get("GOW3_STAGING_PREWARM_BLOCKS")), "two 16 MiB prewarm blocks");
+        ok(!e.containsKey("GOW3_DMEM_MB") && !e.containsKey("GOW3_DMEM_REPORT_MB"),
+            "A732 must keep guest PS4 virtual memory unchanged");
         for(String gpu:new String[]{"Adreno (TM) 750","Adreno (TM) 830","Mali-G720"}) {
             e=env();
             ok("8gb-balanced".equals(TlouDevicePolicy.configureMemory(
