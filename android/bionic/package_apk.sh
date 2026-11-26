@@ -146,6 +146,7 @@ if [[ ! -s "$key" ]]; then
     -dname "CN=TLOU-Bionic-development, OU=Daedalus fork, O=ProxCGaming" -noprompt || exit 8
   [[ -s "$key" ]] || { echo "ERROR: generated signing identity is empty" >&2; exit 8; }
 fi
+# Fork build: the signing identity above is fork-local (see comment at key=).
 "$android_tools/apksigner" sign --ks "$key" --ks-key-alias tlou-bionic \
   --ks-pass pass:TLOU-Bionic-development --key-pass pass:TLOU-Bionic-development \
   --out "$apk" "$aligned"
