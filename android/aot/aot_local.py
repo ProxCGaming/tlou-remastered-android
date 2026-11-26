@@ -74,8 +74,15 @@ TLOU_111_SECOND_SWITCH_SIGNATURE_SHA256 = "3e712ef08edbc99750546e5d47589b1145bf6
 # The newest +0x1c28ad was outside the 35 targeted granular hints and
 # stopped a genuine TSO-OFF recompilation after ~3m32s. The exact seed
 # must be present even without an exported misses log on a future install.
+# 27 Nov 2026 (Nord 4, OnePlus CPH2661, Adreno 732): +0x10d5670 was the top
+# fault rip in the home-intro collapse period (14 of 24 faults while FPS
+# fell below 3); +0xf78055 faulted 15 times but only in startup/warmup,
+# 0 times in the collapse, so it is seeded as a startup hint only and is
+# NOT claimed to be the collapse cause. Both are added as exact seeds only
+# (no new hotspot region: the bounded-sweep count test pins the total).
 TLOU_111_WORKER_JUMP_TARGETS = (
     0x1BF55B, 0x1C28AD, 0x553C14, 0x553C82, 0xA2125E,
+    0x10D5670, 0xF78055,
 )
 
 # Worker's unresolved indirect-branch target families. Granularizing only
