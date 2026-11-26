@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <new>
 #include <ranges>
@@ -430,6 +432,10 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
     ASSERT_MSG(cache_result == vk::Result::eSuccess, "Failed to create pipeline cache: {}",
                vk::to_string(cache_result));
     pipeline_cache = std::move(cache);
+    // gow3 27 Nov 2026: seed the classic cache from the previous session when
+    // one exists for this exact driver; a rejected file falls back silently
+    // to the empty cache above. Worker caches are seeded from this one later.
+    LoadClassicCache();
     // gow3: the compiler threads always exist; the in-game menu switches async compilation live
     // (Gow3Settings::async_shaders, GOW3_ASYNC_SHADERS at start).
     {
@@ -456,6 +462,105 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
 PipelineCache::~PipelineCache() {
     StopWarmUp();
     FinishCompilations();
+    // Worker caches are merged into the main one by FinishCompilations, so
+    // this saves everything built this session. A killed process skips this;
+    // Sync() saves on the clean-exit path as well.
+    SaveClassicCache();
+}
+
+// gow3 27 Nov 2026: classic VkPipelineCache disk persistence. Turnip does
+// not implement VK_KHR_pipeline_binary, so the per-pipeline binary cache
+// reports 0 hits / 0 saved on Adreno forever; the classic cache is the
+// driver-supported fallback. Every failure path returns silently with an
+// empty cache or no save, never breaking startup or shutdown.
+std::filesystem::path PipelineCache::ClassicCachePath() const {
+    const char* dir = std::getenv("GOW3_GPU_USER_DIR");
+    if (!dir || !dir[0]) {
+        return {};
+    }
+    // v1: cache format version. The driver key means a driver update never
+    // loads a cache another driver version wrote.
+    return std::filesystem::path(dir) /
+           fmt::format("vk-pipeline-cache-v1-{:08x}-{:08x}-{:08x}-{:08x}.bin",
+                       instance.GetVendorID(), instance.GetDeviceID(),
+                       instance.GetDriverVersion(), instance.ApiVersion());
+}
+
+void PipelineCache::LoadClassicCache() {
+    const auto path = ClassicCachePath();
+    if (path.empty()) {
+        return;
+    }
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path, ec);
+    if (ec || size == 0 || size > 64 * 1024 * 1024) {
+        return;
+    }
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        return;
+    }
+    std::vector<std::uint8_t> data(size);
+    if (!file.read(reinterpret_cast<char*>(data.data()), std::streamsize(size)) ||
+        static_cast<size_t>(file.gcount()) != size) {
+        return;
+    }
+    vk::PipelineCacheCreateInfo info{};
+    info.initialDataSize = data.size();
+    info.pInitialData = data.data();
+    auto [result, cache] = instance.GetDevice().createPipelineCacheUnique(info);
+    if (result != vk::Result::eSuccess) {
+        std::printf("TLOU pipeline cache: saved cache rejected by driver; starting empty\n");
+        return;
+    }
+    pipeline_cache = std::move(cache);
+    std::printf("TLOU pipeline cache: loaded %zu bytes from %s\n", data.size(),
+                path.filename().string().c_str());
+}
+
+void PipelineCache::SaveClassicCache() {
+    if (num_new_pipelines == classic_cache_saved_pipelines || !pipeline_cache) {
+        return;
+    }
+    const auto path = ClassicCachePath();
+    if (path.empty()) {
+        return;
+    }
+    const VkDevice device = static_cast<VkDevice>(instance.GetDevice());
+    const VkPipelineCache cache = static_cast<VkPipelineCache>(*pipeline_cache);
+    size_t size = 0;
+    if (vkGetPipelineCacheData(device, cache, &size, nullptr) != VK_SUCCESS || size == 0 ||
+        size > 64 * 1024 * 1024) {
+        return;
+    }
+    std::vector<std::uint8_t> data(size);
+    if (vkGetPipelineCacheData(device, cache, &size, data.data()) != VK_SUCCESS) {
+        return;
+    }
+    data.resize(size);
+    // Write-then-rename so a killed process never leaves a torn cache file.
+    const auto tmp = path.string() + ".tmp";
+    {
+        std::ofstream file(tmp, std::ios::binary | std::ios::trunc);
+        if (!file ||
+            !file.write(reinterpret_cast<const char*>(data.data()),
+                        std::streamsize(data.size()))) {
+            return;
+        }
+        file.flush();
+        if (!file) {
+            return;
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, path, ec);
+    if (ec) {
+        std::filesystem::remove(tmp, ec);
+        return;
+    }
+    classic_cache_saved_pipelines = num_new_pipelines;
+    std::printf("TLOU pipeline cache: saved %zu bytes (%u new pipelines)\n", data.size(),
+                num_new_pipelines);
 }
 
 // gow3: shader/pipeline compile time on the GPU thread, reported by GOW3_FRAME_STATS.

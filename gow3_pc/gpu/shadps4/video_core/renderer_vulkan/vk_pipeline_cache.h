@@ -4,6 +4,7 @@
 #pragma once
 
 #include <chrono>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -253,6 +254,20 @@ private:
     std::atomic<u64> prefetch_wait_ns{};
     void FinishCompilations();
     void SeedWorkerCaches();
+    /// gow3 27 Nov 2026 (Nord 4 / Adreno 732): classic VkPipelineCache disk
+    /// persistence. The per-pipeline binary cache (VK_KHR_pipeline_binary)
+    /// needs driver support Turnip does not provide, so on Adreno it reports
+    /// 0 hits / 0 saved forever and every launch rebuilds ~628 pipelines
+    /// (~17.7 s driver time); the classic cache works on every driver.
+    /// Load reads the file Save wrote; both fail silently to an empty cache.
+    /// The filename keys on vendor/device/driver/API version, so a driver
+    /// update never loads a stale cache. Save runs after FinishCompilations
+    /// merges the worker caches into the main one, and only when new
+    /// pipelines were built since the last save.
+    std::filesystem::path ClassicCachePath() const;
+    void LoadClassicCache();
+    void SaveClassicCache();
+    u32 classic_cache_saved_pipelines{};
     bool CheckCacheProfile();
     struct BackgroundWarmup;
     struct WarmStage;

@@ -1841,6 +1841,7 @@ void PipelineCache::StopWarmUp() {
 void PipelineCache::Sync() {
     StopWarmUp();
     FinishCompilations();
+    SaveClassicCache();
     Storage::DataBase::Instance().Close();
 }
 
