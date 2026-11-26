@@ -130,10 +130,21 @@ aligned="$out/tlou-release-aligned.apk"
 apk="$root/out/release/TheLastOfUsRemastered-Android-v0.2.0-arm64.apk"
 "$android_tools/zipalign" -f -p 4 "$unsigned" "$aligned"
 key="$out/experimental-development.jks"
-# A different key would make updates impossible. Never regenerate a release key.
+# Upstream: a different key would make updates impossible. Never regenerate
+# a release key. Fork (nord4-pipeline-cache-732): the upstream key lives
+# only in upstream's Actions cache and cannot be recovered, so a fork build
+# can never be signed with it. Generate a fork-local development identity
+# once when missing; the workflow's cache step saves it afterwards, so later
+# fork builds keep the same identity. Consequence, stated to the user: this
+# APK cannot install OVER the upstream v0.2.0 (Android rejects a signature
+# mismatch) — export saves, uninstall, install fresh, import saves.
 if [[ ! -s "$key" ]]; then
-  echo "ERROR: existing TLOU signing identity missing; refusing a differently signed APK" >&2
-  exit 8
+  echo "WARNING: no signing identity in cache; generating a fork-local development key (cannot update upstream-signed installs in place)" >&2
+  command -v keytool >/dev/null || { echo "ERROR: keytool unavailable; cannot create signing identity" >&2; exit 8; }
+  keytool -genkeypair -alias tlou-bionic -keyalg RSA -keysize 2048 -validity 10000 \
+    -keystore "$key" -storepass TLOU-Bionic-development -keypass TLOU-Bionic-development \
+    -dname "CN=TLOU-Bionic-development, OU=Daedalus fork, O=ProxCGaming" -noprompt || exit 8
+  [[ -s "$key" ]] || { echo "ERROR: generated signing identity is empty" >&2; exit 8; }
 fi
 "$android_tools/apksigner" sign --ks "$key" --ks-key-alias tlou-bionic \
   --ks-pass pass:TLOU-Bionic-development --key-pass pass:TLOU-Bionic-development \
